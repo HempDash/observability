@@ -1,0 +1,86 @@
+groups:
+  # PostgreSQL Database Recording Rules
+  - name: postgres_recording.rules
+    interval: 30s
+    rules:
+      # Database replica lag in seconds (calculated from write_lag, flush_lag, or replay_lag)
+      - record: db_replica_lag_seconds
+        expr: pg_stat_replication_write_lag
+
+      # Total transactions per second across all databases
+      - record: db_total_tps
+        expr: sum(rate(pg_stat_database_xact_commit[5m])) + sum(rate(pg_stat_database_xact_rollback[5m]))
+
+      # Cache hit ratio percentage
+      - record: db_cache_hit_ratio
+        expr: |
+          sum(pg_stat_database_blks_hit) /
+          (sum(pg_stat_database_blks_hit) + sum(pg_stat_database_blks_read)) * 100
+
+      # Active connections across all databases
+      - record: db_active_connections
+        expr: sum(pg_stat_database_numbackends)
+
+      # Connection usage percentage
+      - record: db_connection_usage_percent
+        expr: |
+          sum(pg_stat_database_numbackends) /
+          sum(pg_settings_max_connections) * 100
+
+      # Deadlocks per second
+      - record: db_deadlocks_per_second
+        expr: sum(rate(pg_stat_database_deadlocks[5m]))
+
+      # Temp files bytes written per second
+      - record: db_temp_bytes_per_second
+        expr: sum(rate(pg_stat_database_temp_bytes[5m]))
+
+  # Infrastructure Recording Rules
+  - name: infrastructure_recording.rules
+    interval: 30s
+    rules:
+      # Memory usage percentage
+      - record: instance_memory_usage_percent
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+
+      # CPU usage percentage (inverted idle)
+      - record: instance_cpu_usage_percent
+        expr: |
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      # Disk usage percentage
+      - record: instance_disk_usage_percent
+        expr: |
+          (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100
+
+      # Network receive rate in megabytes per second
+      - record: instance_network_receive_mb_per_second
+        expr: rate(node_network_receive_bytes_total[5m]) / 1024 / 1024
+
+      # Network transmit rate in megabytes per second
+      - record: instance_network_transmit_mb_per_second
+        expr: rate(node_network_transmit_bytes_total[5m]) / 1024 / 1024
+
+  # Replication Health Recording Rules
+  - name: replication_health.rules
+    interval: 30s
+    rules:
+      # Number of streaming replicas
+      - record: db_replication_count
+        expr: count(pg_stat_replication_state{state="streaming"})
+
+      # Maximum replica lag across all replicas
+      - record: db_max_replica_lag_seconds
+        expr: max(pg_stat_replication_write_lag)
+
+      # Average replica lag across all replicas
+      - record: db_avg_replica_lag_seconds
+        expr: avg(pg_stat_replication_write_lag)
+
+      # Replication health score (1 = healthy, 0 = unhealthy)
+      - record: db_replication_health_score
+        expr: |
+          (count(pg_stat_replication_state{state="streaming"}) > 0)
+          and
+          (max(pg_stat_replication_write_lag) < 10)

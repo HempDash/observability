@@ -1,0 +1,112 @@
+groups:
+  # Database High Availability (DB-HA) Alert Rules
+  - name: postgres-ha.rules
+    interval: 1m
+    rules:
+      - alert: ReplicaNotStreaming
+        expr: pg_stat_replication == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "PostgreSQL replica not streaming"
+          description: "No rows returned from pg_stat_replication for 5 minutes. Replication may have stopped."
+
+      - alert: ReplicaLagHigh
+        expr: db_replica_lag_seconds > 15
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "PostgreSQL replica lag high"
+          description: "Replication lag is over 15 seconds for 5 minutes. Current lag: {{ $value }}s"
+
+      - alert: ExporterDown
+        expr: absent(up{job="postgres-exporter"} == 1)
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Postgres exporter down"
+          description: "No successful scrape from postgres-exporter for 2 minutes. Database metrics unavailable."
+
+  # General Infrastructure Alerts
+  - name: infrastructure.rules
+    interval: 1m
+    rules:
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for 5 minutes. Current usage: {{ $value }}%"
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for 5 minutes. Current usage: {{ $value }}%"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Low disk space"
+          description: "Available disk space is below 15% for 5 minutes. Current available: {{ $value }}%"
+
+  # PostgreSQL Database Alerts
+  - name: postgres.rules
+    interval: 1m
+    rules:
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "PostgreSQL instance down"
+          description: "PostgreSQL instance has been down for 2 minutes."
+
+      - alert: PostgreSQLTooManyConnections
+        expr: sum by (instance) (pg_stat_database_numbackends) / sum by (instance) (pg_settings_max_connections) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "PostgreSQL too many connections"
+          description: "PostgreSQL instance is using more than 80% of max connections for 5 minutes. Current: {{ $value }}%"
+
+      - alert: PostgreSQLDeadLocks
+        expr: rate(pg_stat_database_deadlocks[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "PostgreSQL deadlocks detected"
+          description: "PostgreSQL has detected deadlocks in the last 5 minutes."
+
+      - alert: PostgreSQLSlowQueries
+        expr: pg_stat_activity_max_tx_duration > 300
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "PostgreSQL slow queries detected"
+          description: "PostgreSQL has queries running for more than 5 minutes."
