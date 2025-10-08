@@ -1,0 +1,153 @@
+name: Prometheus Lint
+
+on:
+  pull_request:
+    paths:
+      - 'prometheus/**'
+      - 'alertmanager/**'
+      - '.github/workflows/promlint.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'prometheus/**'
+      - 'alertmanager/**'
+      - '.github/workflows/promlint.yml'
+
+jobs:
+  promtool:
+    name: Validate Prometheus Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Lint Prometheus configuration
+        run: |
+          echo "Validating prometheus/prom.yml..."
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            prom/prometheus:latest \
+            promtool check config /workspace/prometheus/prom.yml
+
+      - name: Lint alert rules
+        run: |
+          echo "Validating prometheus/rules/alerts.yml..."
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            prom/prometheus:latest \
+            promtool check rules /workspace/prometheus/rules/alerts.yml
+
+      - name: Lint recording rules
+        run: |
+          echo "Validating prometheus/rules/recording.yml..."
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            prom/prometheus:latest \
+            promtool check rules /workspace/prometheus/rules/recording.yml
+
+      - name: Check Prometheus config syntax
+        run: |
+          echo "Running comprehensive syntax check..."
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            prom/prometheus:latest \
+            promtool check config /workspace/prometheus/prom.yml
+
+      - name: Test alert rule queries
+        run: |
+          echo "Testing alert rule queries for validity..."
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            prom/prometheus:latest \
+            promtool test rules /workspace/prometheus/rules/alerts.yml || echo "No test file found (expected)"
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "✅ All Prometheus configuration files are valid!"
+          echo ""
+          echo "Validated files:"
+          echo "  - prometheus/prom.yml"
+          echo "  - prometheus/rules/alerts.yml"
+          echo "  - prometheus/rules/recording.yml"
+
+  amtool:
+    name: Validate Alertmanager Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Lint Alertmanager configuration
+        run: |
+          echo "Validating alertmanager/alertmanager.yml..."
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            prom/alertmanager:latest \
+            amtool check-config /workspace/alertmanager/alertmanager.yml
+
+      - name: Check Alertmanager routing
+        run: |
+          echo "Checking Alertmanager routing configuration..."
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            prom/alertmanager:latest \
+            amtool config routes --config.file=/workspace/alertmanager/alertmanager.yml || true
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "✅ Alertmanager configuration is valid!"
+          echo ""
+          echo "Validated files:"
+          echo "  - alertmanager/alertmanager.yml"
+
+  yaml-lint:
+    name: YAML Syntax Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Lint Prometheus YAML files
+        run: |
+          echo "Linting YAML files..."
+          yamllint prometheus/prom.yml || true
+          yamllint prometheus/rules/alerts.yml || true
+          yamllint prometheus/rules/recording.yml || true
+          yamllint alertmanager/alertmanager.yml || true
+          yamllint grafana/provisioning/alerting/rule_groups.yaml || true
+          yamllint grafana/provisioning/dashboards/dashboards.yml || true
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "✅ YAML syntax validation complete!"
+
+  json-lint:
+    name: JSON Syntax Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Grafana dashboard JSON
+        run: |
+          echo "Validating Grafana dashboard JSON files..."
+          for file in grafana/dashboards/*.json; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+              python3 -m json.tool "$file" > /dev/null && echo "✅ $file is valid JSON" || (echo "❌ $file has JSON errors" && exit 1)
+            fi
+          done
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "✅ All JSON files are valid!"

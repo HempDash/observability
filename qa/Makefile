@@ -1,4 +1,4 @@
-.PHONY: help test test-metrics test-alerts test-all clean setup
+.PHONY: help test test-metrics test-alerts test-backup-restore test-all clean setup
 
 # Default target
 help:
@@ -6,12 +6,13 @@ help:
 	@echo "=================================="
 	@echo ""
 	@echo "Available targets:"
-	@echo "  make setup          - Set up environment and dependencies"
-	@echo "  make test-metrics   - Test metrics collection"
-	@echo "  make test-alerts    - Test alert configuration"
-	@echo "  make test-all       - Run all tests"
-	@echo "  make test           - Alias for test-all"
-	@echo "  make clean          - Clean up test artifacts"
+	@echo "  make setup                - Set up environment and dependencies"
+	@echo "  make test-metrics         - Test metrics collection"
+	@echo "  make test-alerts          - Test alert configuration"
+	@echo "  make test-backup-restore  - Test backup/restore validation"
+	@echo "  make test-all             - Run all tests"
+	@echo "  make test                 - Alias for test-all"
+	@echo "  make clean                - Clean up test artifacts"
 	@echo ""
 
 # Set up environment
@@ -24,7 +25,7 @@ setup:
 	else \
 		echo ".env file already exists"; \
 	fi
-	@chmod +x test_metrics.sh test_alerts.sh
+	@chmod +x test_metrics.sh test_alerts.sh test_backup_restore.sh
 	@echo "Setup complete!"
 
 # Test metrics collection
@@ -36,6 +37,16 @@ test-metrics:
 test-alerts:
 	@echo "Running alert tests..."
 	@./test_alerts.sh
+
+# Test backup/restore validation
+test-backup-restore:
+	@echo "Running backup/restore validation tests..."
+	@if [ -f .env ]; then \
+		source .env && ./test_backup_restore.sh; \
+	else \
+		echo "WARNING: .env file not found. Using environment variables."; \
+		./test_backup_restore.sh; \
+	fi
 
 # Run all tests
 test-all: test-metrics test-alerts

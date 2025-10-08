@@ -13,6 +13,9 @@ This runbook provides operational guidance for managing and troubleshooting the 
 5. [Alert Response Procedures](#alert-response-procedures)
 6. [Maintenance Procedures](#maintenance-procedures)
 7. [Recovery Procedures](#recovery-procedures)
+8. [Backups & Restore (Stage 7)](#backups--restore-stage-7)
+9. [Failover Drill (Stage 7)](#failover-drill-stage-7)
+10. [Security & Access Review (Stage 8)](#security--access-review-stage-8)
 
 ---
 
@@ -428,6 +431,477 @@ railway restart --service grafana
 
 ---
 
+## Backups & Restore (Stage 7)
+
+### Backup Schedule
+
+**Schedule**: Daily backups enabled in Railway with 7–14 day retention, scheduled during off-peak hours (typically 2-4 AM UTC).
+
+**Retention Policy**: 14 days (adjust based on compliance and storage requirements).
+
+### Manual Backup Procedure
+
+To create a manual backup outside the automated schedule:
+
+1. **Via Railway Dashboard**:
+   ```
+   Railway → Primary Postgres Service → Backups Tab → Create Backup
+   ```
+
+2. **Record Backup Metadata**:
+   After backup completes, document in operations log:
+   - Timestamp: `YYYY-MM-DD HH:MM:SS UTC`
+   - Backup size: `XXX MB/GB`
+   - Checksum/ID: (if available from Railway)
+   - Reason: (scheduled, pre-migration, incident response, etc.)
+
+3. **Via CLI** (if direct database access):
+   ```bash
+   # Create timestamped backup
+   BACKUP_FILE="backup_$(date +%Y%m%d_%H%M%S).sql"
+   pg_dump "$DATABASE_URL" > "$BACKUP_FILE"
+
+   # Verify backup integrity
+   psql "$DATABASE_URL" -c "SELECT 'Backup source verified' AS status"
+
+   # Calculate checksum
+   shasum -a 256 "$BACKUP_FILE"
+   ```
+
+### Restore Procedure
+
+**Use Case**: Restore to scratch environment, staging, or disaster recovery.
+
+#### Restore from Railway Backup
+
+1. **Create Target Database**:
+   ```
+   Railway → New Service → Add PostgreSQL
+   ```
+
+2. **Restore from Backup**:
+   ```
+   Railway → New Postgres Service → Backups → Select Backup → Restore
+   ```
+
+3. **Verify Restoration**:
+   ```bash
+   # Connect to restored database
+   railway connect postgres-restored
+
+   # Verify schema
+   \dt
+
+   # Check migration version
+   SELECT * FROM alembic_version;
+   ```
+
+#### Restore from SQL Dump
+
+1. **Create Empty Database**:
+   ```bash
+   createdb hempdash_restore
+   ```
+
+2. **Restore from File**:
+   ```bash
+   # Restore backup
+   psql "$RESTORE_DATABASE_URL" < backup_YYYYMMDD_HHMMSS.sql
+   ```
+
+3. **Validate Restoration**:
+   ```sql
+   -- Connect to restored database
+   psql "$RESTORE_DATABASE_URL"
+
+   -- List all tables
+   \dt
+
+   -- Verify migration state
+   SELECT * FROM alembic_version;
+
+   -- Run smoke query (example)
+   SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days';
+   SELECT COUNT(*) FROM orders WHERE status = 'completed';
+   ```
+
+4. **Run QA Tests**:
+   ```bash
+   cd qa
+   export TEST_DB_URL="$RESTORE_DATABASE_URL"
+   make test-backup-restore
+   ```
+
+### Disaster Recovery Objectives
+
+**RTO (Recovery Time Objective)**: ≤ 60 seconds for primary database restart.
+
+**RPO (Recovery Point Objective)**: ≤ 15 minutes (based on backup frequency and WAL archiving).
+
+**Data Retention**: 14 days for automated backups; critical backups archived separately for 90 days.
+
+### Backup Verification
+
+**Monthly Verification**:
+1. Select random backup from previous month
+2. Restore to test environment
+3. Run QA validation suite
+4. Document results in operations log
+
+---
+
+## Failover Drill (Stage 7)
+
+### Objective
+
+Measure and verify the Recovery Time Objective (RTO) when the primary database is restarted or fails over to replica.
+
+### Prerequisites
+
+1. **Health Checks Active**: Ensure synthetics monitoring or k6 health checks are running
+2. **Monitoring Ready**: Grafana dashboards and Prometheus alerts active
+3. **Communication**: Notify team that drill is in progress
+4. **Replica Healthy**: Verify replica is streaming and lag < 1s
+
+### Drill Procedure
+
+#### Step 1: Pre-Drill Verification
+
+```bash
+# Verify primary is healthy
+railway status --service primary-db
+
+# Check replication status
+psql "$PRIMARY_DATABASE_URL" -c "SELECT * FROM pg_stat_replication;"
+
+# Verify replica lag
+curl http://prometheus:9090/api/v1/query?query=pg_stat_replication_write_lag
+
+# Baseline health check
+curl https://your-app.railway.app/health/ready
+```
+
+#### Step 2: Execute Failover
+
+**Manual Restart Drill**:
+```bash
+# Record start time
+START_TIME=$(date +%s)
+echo "Drill started at: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+
+# Restart primary database
+railway restart --service primary-db
+
+# Monitor health endpoint
+while true; do
+  if curl -s https://your-app.railway.app/health/ready | grep -q "ok"; then
+    END_TIME=$(date +%s)
+    RTO=$((END_TIME - START_TIME))
+    echo "Service recovered at: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+    echo "RTO: ${RTO} seconds"
+    break
+  fi
+  sleep 1
+done
+```
+
+**Automated Failover** (with repmgr):
+```bash
+# Promote replica to primary
+repmgr standby promote -f /etc/repmgr.conf --log-level INFO
+
+# Update application connection strings
+# (typically handled by connection pooler or DNS)
+```
+
+#### Step 3: Post-Drill Verification
+
+```bash
+# Verify primary is back online
+railway status --service primary-db
+
+# Check replication resumed
+psql "$PRIMARY_DATABASE_URL" -c "SELECT * FROM pg_stat_replication;"
+
+# Verify no data loss
+psql "$PRIMARY_DATABASE_URL" -c "SELECT COUNT(*) FROM critical_table;"
+
+# Check Prometheus alerts (should auto-resolve)
+curl http://prometheus:9090/api/v1/alerts | grep -i replica
+```
+
+### Drill Results Template
+
+Document results in operations log:
+
+```markdown
+## Failover Drill - [DATE]
+
+**Drill Type**: Manual Restart / Automated Failover / Simulated Crash
+
+**Participants**: [Team members]
+
+**Timeline**:
+- Start Time: YYYY-MM-DD HH:MM:SS UTC
+- Failure Detected: YYYY-MM-DD HH:MM:SS UTC (+Xs)
+- Failover Initiated: YYYY-MM-DD HH:MM:SS UTC (+Xs)
+- Service Recovered: YYYY-MM-DD HH:MM:SS UTC (+Xs)
+- Full Recovery: YYYY-MM-DD HH:MM:SS UTC (+Xs)
+
+**Metrics**:
+- RTO Measured: XX seconds
+- RTO Target: ≤ 60 seconds
+- Data Loss: None / XX transactions
+- Alert Latency: XX seconds
+
+**Observations**:
+- [What went well]
+- [What needs improvement]
+- [Unexpected behaviors]
+
+**Action Items**:
+- [ ] Item 1
+- [ ] Item 2
+```
+
+### Drill Frequency
+
+- **Planned Drills**: Quarterly (every 3 months)
+- **Unannounced Drills**: Bi-annually (every 6 months)
+- **Post-Incident Drills**: After any production database incident
+
+---
+
+## Security & Access Review (Stage 8)
+
+### Database Roles & Permissions
+
+**Principle**: Least privilege access for all database users.
+
+#### Application User
+- **Role**: `app_user`
+- **Privileges**:
+  - `SELECT`, `INSERT`, `UPDATE`, `DELETE` on application tables
+  - `EXECUTE` on application functions
+  - **NO** superuser, replication, or DDL rights
+- **Verification**:
+  ```sql
+  SELECT rolname, rolsuper, rolreplication, rolcreaterole, rolcreatedb
+  FROM pg_roles
+  WHERE rolname = 'app_user';
+  ```
+
+#### Replication User
+- **Role**: `replication_user`
+- **Privileges**:
+  - `REPLICATION` privilege only
+  - Minimal table access (pg_stat_replication only)
+- **Verification**:
+  ```sql
+  SELECT rolname, rolreplication
+  FROM pg_roles
+  WHERE rolname = 'replication_user';
+  ```
+
+#### Admin User
+- **Role**: `admin_user` (for migrations and schema changes only)
+- **Usage**: CI/CD pipelines, schema migrations
+- **Restrictions**: Not used by application runtime
+
+### Secrets Management
+
+**Policy**: All credentials stored in Railway Secrets or GitHub Secrets. **Never** commit secrets to Git.
+
+**Rotation Schedule**: Every 90 days for all production credentials.
+
+**Secrets Inventory**: See [`docs/security/secrets.md`](../docs/security/secrets.md) for full inventory and rotation tracking.
+
+#### Key Secrets
+
+| Secret | Location | Rotation Frequency |
+|--------|----------|-------------------|
+| `POSTGRES_PASSWORD` | Railway Secrets | 90 days |
+| `PGPASSWORD` | Railway Secrets | 90 days |
+| `REPMGR_USER_PWD` | Railway Secrets (Primary only) | 90 days |
+| `SLACK_WEBHOOK_URL` | Railway Secrets (Alertmanager) | 180 days |
+| `PAGERDUTY_SERVICE_KEY` | Railway Secrets (Alertmanager) | 180 days |
+| `GRAFANA_ADMIN_PASSWORD` | Railway Secrets | 90 days |
+
+#### Rotation Procedure
+
+```bash
+# 1. Generate new password
+NEW_PASSWORD=$(openssl rand -base64 32)
+
+# 2. Update in Railway
+railway variables --set POSTGRES_PASSWORD="$NEW_PASSWORD"
+
+# 3. Update application config (if needed)
+# Update any downstream services that use this credential
+
+# 4. Verify connectivity
+psql "postgresql://app_user:$NEW_PASSWORD@primary-db:5432/hempdash" -c "SELECT 1;"
+
+# 5. Document rotation
+# Update docs/security/secrets.md with new rotation date
+
+# 6. Revoke old credentials (if applicable)
+# For database users:
+psql -c "ALTER USER app_user WITH PASSWORD '$NEW_PASSWORD';"
+```
+
+### Network & TLS Security
+
+**TLS Enforcement**: All database connections require SSL/TLS.
+
+```bash
+# Verify sslmode in connection strings
+railway variables | grep DATABASE_URL
+# Should contain: sslmode=require
+
+# Test connection with SSL verification
+psql "$DATABASE_URL?sslmode=require" -c "SELECT version();"
+```
+
+**Network Isolation**:
+- Internal services use Railway private networking
+- Public access minimized to only necessary endpoints
+- Database ports not exposed publicly
+- Grafana exposed via Railway public URL with authentication
+
+**Firewall Rules** (if applicable):
+- Only Railway internal network can access database
+- Prometheus metrics endpoints restricted to monitoring network
+- Alertmanager webhook endpoints validated
+
+### CI/CD Security
+
+**Branch Protection** (GitHub):
+- `main` branch: Require PR reviews (minimum 1 approver)
+- Status checks must pass before merge
+- No direct commits to `main`
+
+**Secret Scanning**:
+- GitHub Advanced Security secret scanning enabled
+- Pre-commit hooks to prevent credential commits
+- Dependency scanning for vulnerabilities
+
+**Container Security**:
+- Base images pinned to specific versions (not `latest`)
+- Regular image updates for security patches
+- Minimal container images (distroless where possible)
+
+**Verification**:
+```bash
+# Check GitHub branch protection
+gh api repos/HempDash/observability/branches/main/protection
+
+# Verify secret scanning enabled
+gh api repos/HempDash/observability/secret-scanning/alerts
+
+# Check Dockerfile base images
+grep "^FROM" */Dockerfile
+```
+
+### Alerting & Monitoring Security
+
+**Alert Routing Verified**:
+- Critical alerts → PagerDuty + Slack `#alerts-critical`
+- Warning alerts → Slack `#alerts-warnings`
+- Platform alerts → Slack `#platform-alerts`
+
+**Inhibition Rules Active**:
+- Critical alerts suppress warning alerts for same instance
+- Primary database down suppresses replica alerts
+
+**Access Control**:
+- Grafana dashboards: Viewer role for all team members
+- Grafana admin: Platform team leads only
+- Prometheus/Alertmanager: Internal network only
+
+**Verification**:
+```bash
+# Test alert routing
+amtool config routes test --config.file=alertmanager/alertmanager.yml \
+  severity=critical team=platform
+
+# Check Grafana users
+curl -H "Authorization: Bearer $GRAFANA_API_KEY" \
+  http://grafana:3000/api/org/users
+```
+
+### Security Audit Checklist
+
+**Monthly**:
+- [ ] Review Grafana user access and permissions
+- [ ] Verify alert routes are delivering notifications
+- [ ] Check for expired secrets (review `docs/security/secrets.md`)
+- [ ] Review database user permissions
+
+**Quarterly**:
+- [ ] Rotate all production credentials
+- [ ] Review and update firewall rules
+- [ ] Audit CI/CD pipeline secrets
+- [ ] Penetration testing of public endpoints
+
+**Annually**:
+- [ ] Full security audit by external firm
+- [ ] Review and update security policies
+- [ ] Compliance verification (SOC2, GDPR, etc.)
+
+### Incident Response
+
+**Security Incident Severity Levels**:
+
+**P0 - Critical**:
+- Unauthorized database access
+- Credential leak in public repository
+- Data exfiltration detected
+
+**Response**: Immediate page, lock down affected systems, rotate all credentials
+
+**P1 - High**:
+- Suspicious login attempts
+- Unusual query patterns
+- Alert delivery failures
+
+**Response**: Investigate within 1 hour, implement mitigations
+
+**P2 - Medium**:
+- Expired credentials still in use
+- Missing MFA on admin accounts
+- Outdated dependencies with known CVEs
+
+**Response**: Schedule fix within 1 week
+
+### Compliance & Audit Logging
+
+**Enabled Logging**:
+- PostgreSQL query logging (slow queries > 1s)
+- Railway deployment logs (retained 30 days)
+- Grafana audit logs (user actions)
+- Alertmanager notification history
+
+**Log Retention**:
+- Application logs: 30 days
+- Security logs: 90 days
+- Compliance logs: 7 years
+
+**Access**:
+```bash
+# View recent database logs
+railway logs --service primary-db --since 1h
+
+# Query slow query log
+psql -c "SELECT * FROM pg_stat_statements ORDER BY total_time DESC LIMIT 10;"
+
+# Grafana audit log
+curl -H "Authorization: Bearer $GRAFANA_API_KEY" \
+  http://grafana:3000/api/admin/stats
+```
+
+---
+
 ## Additional Resources
 
 - [Prometheus Documentation](https://prometheus.io/docs/)
@@ -443,3 +917,4 @@ railway restart --service grafana
 | Date | Change | Author |
 |------|--------|--------|
 | 2025-10-08 | Initial runbook creation with DB-HA triage section | Platform Team |
+| 2025-10-08 | Added Stage 7 (Backups & Restore, Failover Drill) and Stage 8 (Security & Access Review) | Platform Team |
