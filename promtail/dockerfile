@@ -1,0 +1,4 @@
+ARG VERSION=latest
+FROM grafana/promtail:${VERSION}
+
+COPY promtail.yml /etc/promtail/config.yml

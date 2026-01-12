@@ -1,0 +1,171 @@
+groups:
+  - name: log-based-alerts
+    interval: 1m
+    rules:
+      # High error rate alert
+      - alert: HighErrorRate
+        expr: |
+          sum(rate({logging="promtail"} | json | level =~ "error|ERROR" [5m])) by (app)
+          /
+          sum(rate({logging="promtail"} [5m])) by (app)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+          source: logs
+        annotations:
+          summary: "High error rate in {{ $labels.app }}"
+          description: "Error rate is above 5% for {{ $labels.app }} service for 5 minutes. Current rate: {{ $value | humanizePercentage }}"
+
+      # Critical error rate alert
+      - alert: CriticalErrorRate
+        expr: |
+          sum(rate({logging="promtail"} | json | level =~ "error|ERROR" [5m])) by (app)
+          /
+          sum(rate({logging="promtail"} [5m])) by (app)
+          > 0.15
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+          source: logs
+        annotations:
+          summary: "Critical error rate in {{ $labels.app }}"
+          description: "Error rate is above 15% for {{ $labels.app }} service for 2 minutes. Current rate: {{ $value | humanizePercentage }}"
+
+      # Application errors detected
+      - alert: ApplicationErrorsDetected
+        expr: |
+          sum(count_over_time({logging="promtail", app="example_api"} | json | level =~ "error|ERROR" [5m])) > 10
+        for: 3m
+        labels:
+          severity: warning
+          team: application
+          source: logs
+        annotations:
+          summary: "Multiple errors in example_api"
+          description: "More than 10 errors detected in example_api in the last 5 minutes. Total: {{ $value }}"
+
+      # No logs received alert
+      - alert: NoLogsReceived
+        expr: |
+          absent_over_time({logging="promtail"}[10m])
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+          source: logs
+        annotations:
+          summary: "No logs received from services"
+          description: "No logs have been received from any service in the last 10 minutes. Log aggregation may be down."
+
+      # Service specific: No logs from service
+      - alert: ServiceNotLogging
+        expr: |
+          absent_over_time({logging="promtail", app=~".+"}[10m])
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+          source: logs
+        annotations:
+          summary: "Service {{ $labels.app }} not producing logs"
+          description: "No logs received from {{ $labels.app }} in the last 10 minutes. Service may be down or not logging properly."
+
+      # High log volume
+      - alert: HighLogVolume
+        expr: |
+          sum(rate({logging="promtail"}[5m])) by (app) > 100
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          source: logs
+        annotations:
+          summary: "High log volume from {{ $labels.app }}"
+          description: "{{ $labels.app }} is producing more than 100 log lines per second for 10 minutes. Current rate: {{ $value }} lines/s"
+
+      # Slow requests detected (from structured logs)
+      - alert: SlowRequestsDetected
+        expr: |
+          sum(count_over_time({logging="promtail", app="example_api"} | json | duration_ms > 3000 [5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: application
+          source: logs
+        annotations:
+          summary: "Slow requests detected in example_api"
+          description: "More than 5 requests took longer than 3 seconds in the last 5 minutes. Total slow requests: {{ $value }}"
+
+      # Exception/stack trace detected
+      - alert: ExceptionInLogs
+        expr: |
+          sum(count_over_time({logging="promtail"} |~ "(?i)(exception|traceback|stack trace|fatal)" [2m])) by (app) > 0
+        for: 1m
+        labels:
+          severity: warning
+          team: application
+          source: logs
+        annotations:
+          summary: "Exceptions detected in {{ $labels.app }} logs"
+          description: "Exceptions or stack traces found in {{ $labels.app }} logs. Count: {{ $value }}"
+
+      # Authentication failures
+      - alert: AuthenticationFailures
+        expr: |
+          sum(count_over_time({logging="promtail"} |~ "(?i)(auth.*fail|unauthorized|forbidden|401|403)" [5m])) by (app) > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+          source: logs
+        annotations:
+          summary: "High authentication failures in {{ $labels.app }}"
+          description: "More than 10 authentication failures detected in {{ $labels.app }} in the last 5 minutes. Count: {{ $value }}"
+
+      # OOM or memory related errors
+      - alert: OutOfMemoryErrors
+        expr: |
+          sum(count_over_time({logging="promtail"} |~ "(?i)(out of memory|oom|memory allocation failed)" [5m])) by (app) > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+          source: logs
+        annotations:
+          summary: "Out of memory errors in {{ $labels.app }}"
+          description: "Out of memory errors detected in {{ $labels.app }} logs. Count: {{ $value }}"
+
+      # Database connection errors
+      - alert: DatabaseConnectionErrors
+        expr: |
+          sum(count_over_time({logging="promtail"} |~ "(?i)(database.*error|connection.*refused|connection.*timeout|ECONNREFUSED)" [5m])) by (app) > 5
+        for: 3m
+        labels:
+          severity: warning
+          team: platform
+          source: logs
+        annotations:
+          summary: "Database connection errors in {{ $labels.app }}"
+          description: "Multiple database connection errors detected in {{ $labels.app }}. Count: {{ $value }}"
+
+  # Log volume recording rules (for efficient querying)
+  - name: log-volume-recording
+    interval: 1m
+    rules:
+      - record: log_messages:rate5m:by_app
+        expr: sum(rate({logging="promtail"}[5m])) by (app)
+
+      - record: log_errors:rate5m:by_app
+        expr: sum(rate({logging="promtail"} | json | level =~ "error|ERROR" [5m])) by (app)
+
+      - record: log_warnings:rate5m:by_app
+        expr: sum(rate({logging="promtail"} | json | level =~ "warn|WARN" [5m])) by (app)
+
+      - record: log_error_ratio:rate5m:by_app
+        expr: |
+          sum(rate({logging="promtail"} | json | level =~ "error|ERROR" [5m])) by (app)
+          /
+          sum(rate({logging="promtail"}[5m])) by (app)

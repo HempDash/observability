@@ -5,5 +5,8 @@ FROM grafana/loki:${VERSION}
 # Copy the loki.yml configuration file to the container
 COPY loki.yml /etc/loki/loki-confi.yaml
 
+# Copy the alerting rules
+COPY loki-rules.yml /loki/rules/fake/loki-rules.yml
+
 # Command to run Loki
 CMD ["-config.file=/etc/loki/loki-confi.yaml"]
