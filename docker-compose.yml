@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-    
+
   prometheus:
     build:
       context: ./prometheus
@@ -11,6 +11,16 @@ services:
       - "9090:9090"
     volumes:
       - prometheus_data:/prometheus
+    labels:
+      logging: "promtail"
+      app: "prometheus"
+      environment: "development"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "app,environment"
 
   loki:
     build:
@@ -21,8 +31,18 @@ services:
       - "3100:3100"
     volumes:
       - loki_data:/loki
+    labels:
+      logging: "promtail"
+      app: "loki"
+      environment: "development"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "app,environment"
 
-  tempo: 
+  tempo:
     build:
       context: ./tempo
       dockerfile: dockerfile
@@ -33,6 +53,16 @@ services:
       - "4318:4318" # http server for ingest
     volumes:
       - tempo_data:/var/tempo
+    labels:
+      logging: "promtail"
+      app: "tempo"
+      environment: "development"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "app,environment"
 
   grafana:
     build:
@@ -50,8 +80,18 @@ services:
       - LOKI_INTERNAL_URL=http://loki:3100
       - PROMETHEUS_INTERNAL_URL=http://prometheus:9090
       - TEMPO_INTERNAL_URL=http://tempo:3200
+    labels:
+      logging: "promtail"
+      app: "grafana"
+      environment: "development"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "app,environment"
   
-  example_api: 
+  example_api:
     build:
       context: ./examples/api
       dockerfile: dockerfile
@@ -60,9 +100,66 @@ services:
     environment:
       - TEMPO_URL=http://tempo:4318
       - TEMPO_SERVICE_NAME=example_api
+      - LOKI_URL=http://loki:3100
+    labels:
+      logging: "promtail"
+      app: "example_api"
+      environment: "development"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "app,environment"
 
-volumes: 
+  promtail:
+    build:
+      context: ./promtail
+      dockerfile: dockerfile
+    ports:
+      - "9080:9080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    labels:
+      logging: "promtail"
+      app: "promtail"
+      environment: "development"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  alertmanager:
+    build:
+      context: ./alertmanager
+      dockerfile: dockerfile
+    ports:
+      - "9093:9093"
+    volumes:
+      - alertmanager_data:/alertmanager
+    environment:
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-https://hooks.slack.com/services/YOUR/WEBHOOK/URL}
+      - PAGERDUTY_SERVICE_KEY=${PAGERDUTY_SERVICE_KEY:-your-pagerduty-key}
+    labels:
+      logging: "promtail"
+      app: "alertmanager"
+      environment: "development"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "app,environment"
+
+volumes:
   prometheus_data:
   loki_data:
   grafana_data:
   tempo_data:
+  alertmanager_data:

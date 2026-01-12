@@ -1,0 +1,6 @@
+ARG VERSION=latest
+FROM prom/alertmanager:${VERSION}
+
+COPY alertmanager.yml /etc/alertmanager/alertmanager.yml
+
+CMD ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager"]
