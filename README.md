@@ -121,6 +121,31 @@ When configuring your application to send traces to Tempo, please use one of the
 
 Another thing to note is that the ingest API endpoint for the HTTP server is `/v1/traces`. For a working example of this in a node.js express API, see `/examples/api/tracer.js` in our GitHub repository.
 
+### Using Prometheus for Metrics Collection
+
+Prometheus is pre-configured to scrape metrics from services. To add your backend service:
+
+1. **Expose a `/metrics` endpoint** in your application that returns Prometheus-format metrics
+   - For FastAPI: Use `prometheus-fastapi-instrumentator`
+   - For Express: Use `prom-client`
+   - For other frameworks: See the [Prometheus client libraries](https://prometheus.io/docs/instrumenting/clientlibs/)
+
+2. **Configure Prometheus to scrape your service** by editing `prometheus/prom.yml`:
+   ```yaml
+   scrape_configs:
+     - job_name: 'your-service'
+       scrape_interval: 15s
+       metrics_path: '/metrics'
+       static_configs:
+         - targets: ['your-service:port']
+   ```
+
+3. **Example scrape targets included**:
+   - `backend-api` at `backend:8000/metrics` - Ready for your backend service
+   - `postgres-exporter` at `postgres-exporter:9187` - Database metrics
+
+For detailed backend instrumentation instructions, see [`docs/BACKEND_INSTRUMENTATION.md`](docs/BACKEND_INSTRUMENTATION.md).
+
 ### Using otherwise standard observability tooling
 
 To send data from your other Railway applications to this observability stack:
