@@ -84,3 +84,63 @@ groups:
           (count(pg_stat_replication_state{state="streaming"}) > 0)
           and
           (max(pg_stat_replication_write_lag) < 10)
+
+  # Service Health Recording Rules
+  - name: service_health.rules
+    interval: 30s
+    rules:
+      # Individual service health status (1 = up, 0 = down)
+      - record: service_up
+        expr: up{job!="prometheus"}
+        labels:
+          category: "health"
+
+      # Overall service availability percentage (5m window)
+      - record: service_availability_5m
+        expr: avg_over_time(up[5m]) * 100
+
+      # Overall service availability percentage (1h window)
+      - record: service_availability_1h
+        expr: avg_over_time(up[1h]) * 100
+
+      # Overall service availability percentage (24h window)
+      - record: service_availability_24h
+        expr: avg_over_time(up[24h]) * 100
+
+      # Overall service availability percentage (7d window)
+      - record: service_availability_7d
+        expr: avg_over_time(up[7d]) * 100
+
+      # Overall service availability percentage (30d window)
+      - record: service_availability_30d
+        expr: avg_over_time(up[30d]) * 100
+
+      # Count of healthy services
+      - record: service_healthy_count
+        expr: count(up{job!="prometheus"} == 1)
+
+      # Count of unhealthy services
+      - record: service_unhealthy_count
+        expr: count(up{job!="prometheus"} == 0)
+
+      # Total service count
+      - record: service_total_count
+        expr: count(up{job!="prometheus"})
+
+      # Overall service health percentage (current)
+      - record: service_health_percentage
+        expr: |
+          (count(up{job!="prometheus"} == 1) / count(up{job!="prometheus"})) * 100
+
+      # Service uptime in hours (since last restart)
+      - record: service_uptime_hours
+        expr: (time() - process_start_time_seconds) / 3600
+
+      # SLA compliance indicator (1 = meeting SLA, 0 = breaching SLA)
+      # Target: 99.9% uptime (43.2 minutes downtime per month)
+      - record: service_sla_compliance
+        expr: service_availability_30d >= 99.9
+
+      # Service type health aggregation
+      - record: service_type_health
+        expr: avg by(service_type) (up)
