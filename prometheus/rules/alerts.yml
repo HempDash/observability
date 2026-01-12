@@ -110,3 +110,279 @@ groups:
         annotations:
           summary: "PostgreSQL slow queries detected"
           description: "PostgreSQL has queries running for more than 5 minutes."
+
+  # Prometheus Self-Monitoring Alerts
+  - name: prometheus.rules
+    interval: 1m
+    rules:
+      - alert: PrometheusDown
+        expr: up{job="prometheus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Prometheus is down"
+          description: "Prometheus has been down for 2 minutes. Metrics collection is not functioning."
+
+      - alert: PrometheusTSDBReloadsFailing
+        expr: increase(prometheus_tsdb_reloads_failures_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus TSDB reloads are failing"
+          description: "Prometheus has had {{ $value }} TSDB reload failures in the last 5 minutes."
+
+      - alert: PrometheusConfigurationReloadFailing
+        expr: prometheus_config_last_reload_successful == 0
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus configuration reload failed"
+          description: "Prometheus configuration reload has failed. Check the configuration file for errors."
+
+      - alert: PrometheusTooManyRestarts
+        expr: changes(process_start_time_seconds{job="prometheus"}[15m]) > 2
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus is restarting frequently"
+          description: "Prometheus has restarted more than 2 times in the last 15 minutes."
+
+      - alert: PrometheusNotificationQueueRunningFull
+        expr: (prometheus_notifications_queue_length / prometheus_notifications_queue_capacity) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus notification queue is running full"
+          description: "Prometheus notification queue is more than 80% full. Current: {{ $value | humanizePercentage }}"
+
+      - alert: PrometheusErrorSendingAlertsToAlertmanager
+        expr: rate(prometheus_notifications_errors_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus is experiencing errors sending alerts"
+          description: "Prometheus has encountered {{ $value }} errors per second sending alerts to Alertmanager."
+
+      - alert: PrometheusTargetScrapingSlow
+        expr: prometheus_target_interval_length_seconds{quantile="0.9"} > 60
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus target scraping is slow"
+          description: "Prometheus is taking more than 60s to scrape targets. Current: {{ $value }}s"
+
+      - alert: PrometheusLargeScrape
+        expr: increase(prometheus_target_scrapes_exceeded_sample_limit_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus has scrapes that exceed the sample limit"
+          description: "Prometheus has {{ $value }} scrapes that exceed the sample limit in the last 5 minutes."
+
+      - alert: PrometheusTargetScrapeDuplicate
+        expr: increase(prometheus_target_scrapes_sample_duplicate_timestamp_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus has duplicate timestamps in target scrapes"
+          description: "Prometheus has {{ $value }} samples with duplicate timestamps in the last 5 minutes."
+
+      - alert: PrometheusTSDBCheckpointCreationFailures
+        expr: increase(prometheus_tsdb_checkpoint_creations_failed_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus TSDB checkpoint creation is failing"
+          description: "Prometheus has had {{ $value }} checkpoint creation failures in the last 5 minutes."
+
+      - alert: PrometheusTSDBCompactionsFailing
+        expr: increase(prometheus_tsdb_compactions_failed_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus TSDB compactions are failing"
+          description: "Prometheus has had {{ $value }} compaction failures in the last 5 minutes."
+
+      - alert: PrometheusRuleEvaluationFailures
+        expr: increase(prometheus_rule_evaluation_failures_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Prometheus rule evaluation failures"
+          description: "Prometheus has had {{ $value }} rule evaluation failures in the last 5 minutes."
+
+  # Grafana Health Alerts
+  - name: grafana.rules
+    interval: 1m
+    rules:
+      - alert: GrafanaDown
+        expr: absent(up{job="grafana"} == 1)
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Grafana is down"
+          description: "Grafana has been down for 2 minutes. Dashboards are not accessible."
+
+      - alert: GrafanaTooManyRestarts
+        expr: changes(process_start_time_seconds{job="grafana"}[15m]) > 2
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Grafana is restarting frequently"
+          description: "Grafana has restarted more than 2 times in the last 15 minutes."
+
+  # Loki Capacity Alerts
+  - name: loki.rules
+    interval: 1m
+    rules:
+      - alert: LokiDown
+        expr: absent(up{job="loki"} == 1)
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Loki is down"
+          description: "Loki has been down for 2 minutes. Log ingestion and querying is not functioning."
+
+      - alert: LokiRequestErrors
+        expr: 100 * sum(rate(loki_request_duration_seconds_count{status_code=~"5.."}[5m])) by (namespace, job, route) / sum(rate(loki_request_duration_seconds_count[5m])) by (namespace, job, route) > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Loki is experiencing high error rate"
+          description: "Loki {{ $labels.job }} {{ $labels.route }} is experiencing {{ $value | humanizePercentage }} errors."
+
+      - alert: LokiRequestPanic
+        expr: sum(increase(loki_panic_total[10m])) by (namespace, job) > 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Loki is experiencing panics"
+          description: "Loki {{ $labels.job }} has experienced {{ $value }} panics in the last 10 minutes."
+
+      - alert: LokiRequestLatency
+        expr: histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket{route!~"(?i).*tail.*"}[5m])) by (le, job)) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Loki is experiencing high request latency"
+          description: "Loki {{ $labels.job }} p99 request latency is {{ $value }}s (exceeds 1s threshold)."
+
+      - alert: LokiTooManyRestarts
+        expr: changes(process_start_time_seconds{job="loki"}[15m]) > 2
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Loki is restarting frequently"
+          description: "Loki has restarted more than 2 times in the last 15 minutes."
+
+  # Tempo Trace Drop Alerts
+  - name: tempo.rules
+    interval: 1m
+    rules:
+      - alert: TempoDown
+        expr: absent(up{job="tempo"} == 1)
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Tempo is down"
+          description: "Tempo has been down for 2 minutes. Trace ingestion and querying is not functioning."
+
+      - alert: TempoDistributorSpansDropped
+        expr: rate(tempo_distributor_spans_received_total[5m]) - rate(tempo_ingester_spans_received_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Tempo is dropping spans"
+          description: "Tempo distributor is dropping {{ $value }} spans per second."
+
+      - alert: TempoIngesterBlocksFlushed
+        expr: rate(tempo_ingester_blocks_flushed_total[5m]) == 0
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Tempo ingester has not flushed blocks recently"
+          description: "Tempo ingester has not flushed any blocks in the last 15 minutes. This may indicate an issue."
+
+      - alert: TempoCompactorUnhealthy
+        expr: max_over_time(tempodb_compactor_errors_total[5m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Tempo compactor is experiencing errors"
+          description: "Tempo compactor has experienced {{ $value }} errors in the last 5 minutes."
+
+      - alert: TempoRequestErrors
+        expr: 100 * sum(rate(tempo_request_duration_seconds_count{status_code=~"5.."}[5m])) by (job, route) / sum(rate(tempo_request_duration_seconds_count[5m])) by (job, route) > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Tempo is experiencing high error rate"
+          description: "Tempo {{ $labels.job }} {{ $labels.route }} is experiencing {{ $value | humanizePercentage }} errors."
+
+      - alert: TempoRequestLatency
+        expr: histogram_quantile(0.99, sum(rate(tempo_request_duration_seconds_bucket[5m])) by (le, job, route)) > 3
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Tempo is experiencing high request latency"
+          description: "Tempo {{ $labels.job }} {{ $labels.route }} p99 latency is {{ $value }}s (exceeds 3s threshold)."
+
+      - alert: TempoTooManyRestarts
+        expr: changes(process_start_time_seconds{job="tempo"}[15m]) > 2
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Tempo is restarting frequently"
+          description: "Tempo has restarted more than 2 times in the last 15 minutes."

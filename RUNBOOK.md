@@ -16,6 +16,7 @@ This runbook provides operational guidance for managing and troubleshooting the 
 8. [Backups & Restore (Stage 7)](#backups--restore-stage-7)
 9. [Failover Drill (Stage 7)](#failover-drill-stage-7)
 10. [Security & Access Review (Stage 8)](#security--access-review-stage-8)
+11. [Meta-Monitoring (Task 12.6)](#meta-monitoring-task-126)
 
 ---
 
@@ -945,6 +946,398 @@ curl -H "Authorization: Bearer $GRAFANA_API_KEY" \
 
 ---
 
+## Meta-Monitoring (Task 12.6)
+
+### Overview
+
+Meta-monitoring ensures the observability stack itself is healthy and functioning correctly. This includes monitoring Prometheus, Grafana, Loki, and Tempo to detect issues before they impact application monitoring.
+
+### Architecture
+
+```
+Prometheus → Self-scrape metrics
+          → Scrape Grafana metrics
+          → Scrape Loki metrics
+          → Scrape Tempo metrics
+          → Evaluate meta-monitoring alerts
+          → Send to Alertmanager
+```
+
+### Monitored Components
+
+#### Prometheus Self-Monitoring
+
+**Metrics Endpoint**: `http://prometheus:9090/metrics`
+
+**Key Metrics**:
+- `up{job="prometheus"}` - Prometheus availability
+- `prometheus_tsdb_reloads_failures_total` - TSDB reload failures
+- `prometheus_config_last_reload_successful` - Configuration reload status
+- `prometheus_notifications_queue_length` - Alert notification queue size
+- `prometheus_rule_evaluation_failures_total` - Rule evaluation errors
+- `prometheus_target_interval_length_seconds` - Target scrape duration
+
+#### Grafana Health Monitoring
+
+**Metrics Endpoint**: `http://grafana:3000/metrics`
+
+**Key Metrics**:
+- `up{job="grafana"}` - Grafana availability
+- `process_start_time_seconds{job="grafana"}` - Service uptime/restarts
+
+**Health Check**: `curl http://grafana:3000/api/health`
+
+#### Loki Capacity Monitoring
+
+**Metrics Endpoint**: `http://loki:3100/metrics`
+
+**Key Metrics**:
+- `up{job="loki"}` - Loki availability
+- `loki_request_duration_seconds_count` - Request rate by route
+- `loki_request_duration_seconds_bucket` - Request latency distribution
+- `loki_panic_total` - Panic events
+- `process_start_time_seconds{job="loki"}` - Service uptime/restarts
+
+**Health Check**: `curl http://loki:3100/ready`
+
+#### Tempo Trace Monitoring
+
+**Metrics Endpoint**: `http://tempo:3200/metrics`
+
+**Key Metrics**:
+- `up{job="tempo"}` - Tempo availability
+- `tempo_distributor_spans_received_total` - Spans received at distributor
+- `tempo_ingester_spans_received_total` - Spans received at ingester
+- `tempo_ingester_blocks_flushed_total` - Block flush rate
+- `tempodb_compactor_errors_total` - Compactor errors
+- `tempo_request_duration_seconds_bucket` - Request latency distribution
+- `process_start_time_seconds{job="tempo"}` - Service uptime/restarts
+
+**Health Check**: `curl http://tempo:3200/ready`
+
+### Meta-Monitoring Alerts
+
+All meta-monitoring alerts are defined in `prometheus/rules/alerts.yml`.
+
+#### Critical Alerts (P0)
+
+**PrometheusDown**
+- **Expression**: `up{job="prometheus"} == 0`
+- **Duration**: 2 minutes
+- **Impact**: Metrics collection stopped, no monitoring data
+- **Response**: Immediate investigation required
+
+**GrafanaDown**
+- **Expression**: `absent(up{job="grafana"} == 1)`
+- **Duration**: 2 minutes
+- **Impact**: Dashboards unavailable, no visualization
+- **Response**: Check Grafana service logs and restart if needed
+
+**LokiDown**
+- **Expression**: `absent(up{job="loki"} == 1)`
+- **Duration**: 2 minutes
+- **Impact**: Log ingestion stopped, no log querying
+- **Response**: Check Loki service logs and restart if needed
+
+**TempoDown**
+- **Expression**: `absent(up{job="tempo"} == 1)`
+- **Duration**: 2 minutes
+- **Impact**: Trace ingestion stopped, no distributed tracing
+- **Response**: Check Tempo service logs and restart if needed
+
+**LokiRequestPanic**
+- **Expression**: `sum(increase(loki_panic_total[10m])) by (namespace, job) > 0`
+- **Duration**: 2 minutes
+- **Impact**: Loki instability, potential data loss
+- **Response**: Immediate investigation, check for OOM or configuration issues
+
+#### Warning Alerts (P1)
+
+**PrometheusTSDBReloadsFailing**
+- **Expression**: `increase(prometheus_tsdb_reloads_failures_total[5m]) > 0`
+- **Duration**: 2 minutes
+- **Action**: Check Prometheus logs for TSDB errors
+
+**PrometheusConfigurationReloadFailing**
+- **Expression**: `prometheus_config_last_reload_successful == 0`
+- **Duration**: 2 minutes
+- **Action**: Validate configuration syntax with `promtool check config`
+
+**PrometheusTooManyRestarts**
+- **Expression**: `changes(process_start_time_seconds{job="prometheus"}[15m]) > 2`
+- **Duration**: 2 minutes
+- **Action**: Investigate crash logs and resource constraints
+
+**PrometheusNotificationQueueRunningFull**
+- **Expression**: `(prometheus_notifications_queue_length / prometheus_notifications_queue_capacity) > 0.8`
+- **Duration**: 5 minutes
+- **Action**: Check Alertmanager connectivity and alert volume
+
+**PrometheusErrorSendingAlertsToAlertmanager**
+- **Expression**: `rate(prometheus_notifications_errors_total[5m]) > 0`
+- **Duration**: 2 minutes
+- **Action**: Verify Alertmanager endpoint and credentials
+
+**PrometheusTargetScrapingSlow**
+- **Expression**: `prometheus_target_interval_length_seconds{quantile="0.9"} > 60`
+- **Duration**: 5 minutes
+- **Action**: Investigate slow targets, check network latency
+
+**PrometheusLargeScrape**
+- **Expression**: `increase(prometheus_target_scrapes_exceeded_sample_limit_total[5m]) > 0`
+- **Duration**: 2 minutes
+- **Action**: Increase sample limit or reduce cardinality
+
+**PrometheusTargetScrapeDuplicate**
+- **Expression**: `increase(prometheus_target_scrapes_sample_duplicate_timestamp_total[5m]) > 0`
+- **Duration**: 2 minutes
+- **Action**: Check for duplicate time series from targets
+
+**PrometheusTSDBCheckpointCreationFailures**
+- **Expression**: `increase(prometheus_tsdb_checkpoint_creations_failed_total[5m]) > 0`
+- **Duration**: 2 minutes
+- **Action**: Check disk space and TSDB health
+
+**PrometheusTSDBCompactionsFailing**
+- **Expression**: `increase(prometheus_tsdb_compactions_failed_total[5m]) > 0`
+- **Duration**: 2 minutes
+- **Action**: Check disk space and TSDB health
+
+**PrometheusRuleEvaluationFailures**
+- **Expression**: `increase(prometheus_rule_evaluation_failures_total[5m]) > 0`
+- **Duration**: 2 minutes
+- **Action**: Check rule syntax and query performance
+
+**GrafanaTooManyRestarts**
+- **Expression**: `changes(process_start_time_seconds{job="grafana"}[15m]) > 2`
+- **Duration**: 2 minutes
+- **Action**: Check Grafana logs for errors
+
+**LokiRequestErrors**
+- **Expression**: `100 * sum(rate(loki_request_duration_seconds_count{status_code=~"5.."}[5m])) by (namespace, job, route) / sum(rate(loki_request_duration_seconds_count[5m])) by (namespace, job, route) > 10`
+- **Duration**: 5 minutes
+- **Action**: Check Loki logs for error details
+
+**LokiRequestLatency**
+- **Expression**: `histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket{route!~"(?i).*tail.*"}[5m])) by (le, job)) > 1`
+- **Duration**: 5 minutes
+- **Action**: Investigate query performance and resource utilization
+
+**LokiTooManyRestarts**
+- **Expression**: `changes(process_start_time_seconds{job="loki"}[15m]) > 2`
+- **Duration**: 2 minutes
+- **Action**: Check Loki logs for crash reasons
+
+**TempoDistributorSpansDropped**
+- **Expression**: `rate(tempo_distributor_spans_received_total[5m]) - rate(tempo_ingester_spans_received_total[5m]) > 100`
+- **Duration**: 5 minutes
+- **Action**: Check ingester capacity and resource limits
+
+**TempoIngesterBlocksFlushed**
+- **Expression**: `rate(tempo_ingester_blocks_flushed_total[5m]) == 0`
+- **Duration**: 15 minutes
+- **Action**: Verify storage backend and ingester health
+
+**TempoCompactorUnhealthy**
+- **Expression**: `max_over_time(tempodb_compactor_errors_total[5m]) > 2`
+- **Duration**: 5 minutes
+- **Action**: Check compactor logs and storage backend
+
+**TempoRequestErrors**
+- **Expression**: `100 * sum(rate(tempo_request_duration_seconds_count{status_code=~"5.."}[5m])) by (job, route) / sum(rate(tempo_request_duration_seconds_count[5m])) by (job, route) > 10`
+- **Duration**: 5 minutes
+- **Action**: Check Tempo logs for error details
+
+**TempoRequestLatency**
+- **Expression**: `histogram_quantile(0.99, sum(rate(tempo_request_duration_seconds_bucket[5m])) by (le, job, route)) > 3`
+- **Duration**: 5 minutes
+- **Action**: Investigate query performance and resource utilization
+
+**TempoTooManyRestarts**
+- **Expression**: `changes(process_start_time_seconds{job="tempo"}[15m]) > 2`
+- **Duration**: 2 minutes
+- **Action**: Check Tempo logs for crash reasons
+
+### Dashboards
+
+**Meta-Monitoring Dashboard**: `grafana/dashboards/meta_monitoring.json`
+
+The dashboard provides:
+- **Stack Health Overview**: Status panels for all components (Prometheus, Grafana, Loki, Tempo)
+- **Prometheus Monitoring**: Ingestion rate, scrape duration, error rates, notification queue usage
+- **Loki Monitoring**: Request rate, latency, error rate, panic events
+- **Tempo Monitoring**: Span ingestion rate, drop rate, latency, storage operations
+
+**Access**: `http://grafana:3000/d/meta-monitoring/meta-monitoring-observability-stack-health`
+
+### Troubleshooting Procedures
+
+#### Prometheus Not Scraping Targets
+
+**Symptoms**: `up{job="X"}` metric missing or = 0
+
+**Diagnosis**:
+```bash
+# Check target status
+curl http://prometheus:9090/api/v1/targets | jq '.data.activeTargets[] | select(.health != "up")'
+
+# Test endpoint manually
+curl http://loki:3100/metrics
+curl http://tempo:3200/metrics
+curl http://grafana:3000/metrics
+```
+
+**Resolution**:
+1. Verify service is running: `railway status --service X`
+2. Check network connectivity: `nc -zv service-name port`
+3. Verify metrics endpoint responds: `curl http://service:port/metrics`
+4. Check Prometheus scrape config in `prometheus/prom.yml`
+5. Restart Prometheus if needed: `railway restart --service prometheus`
+
+#### High Alert Notification Queue
+
+**Symptoms**: `PrometheusNotificationQueueRunningFull` alert firing
+
+**Diagnosis**:
+```bash
+# Check queue size
+curl http://prometheus:9090/api/v1/query?query=prometheus_notifications_queue_length
+
+# Check Alertmanager status
+curl http://alertmanager:9093/-/healthy
+
+# Check alert delivery errors
+curl http://prometheus:9090/api/v1/query?query=rate(prometheus_notifications_errors_total[5m])
+```
+
+**Resolution**:
+1. Verify Alertmanager is healthy
+2. Check webhook endpoints (PagerDuty, Slack) are responsive
+3. Review alert volume - consider alert fatigue
+4. Increase notification queue capacity if needed (requires Prometheus restart)
+
+#### Loki High Error Rate
+
+**Symptoms**: `LokiRequestErrors` alert firing
+
+**Diagnosis**:
+```bash
+# Check Loki logs
+railway logs --service loki --since 30m | grep -i error
+
+# Query error metrics
+curl http://prometheus:9090/api/v1/query?query='rate(loki_request_duration_seconds_count{status_code=~"5.."}[5m])'
+
+# Check Loki health
+curl http://loki:3100/ready
+```
+
+**Resolution**:
+1. Check for storage issues (disk full, slow I/O)
+2. Verify Loki configuration in `loki/loki.yml`
+3. Check for resource constraints (CPU, memory)
+4. Review recent log ingestion patterns for spikes
+5. Restart Loki if configuration changed: `railway restart --service loki`
+
+#### Tempo Dropping Spans
+
+**Symptoms**: `TempoDistributorSpansDropped` alert firing
+
+**Diagnosis**:
+```bash
+# Check span drop rate
+curl http://prometheus:9090/api/v1/query?query='rate(tempo_distributor_spans_received_total[5m]) - rate(tempo_ingester_spans_received_total[5m])'
+
+# Check Tempo logs
+railway logs --service tempo --since 30m | grep -i drop
+
+# Check ingester status
+curl http://tempo:3200/status
+```
+
+**Resolution**:
+1. Check ingester capacity and resource limits
+2. Verify storage backend has sufficient space
+3. Review trace volume - consider sampling rate
+4. Increase ingester resources if needed
+5. Check for network issues between distributor and ingester
+
+### Verification Commands
+
+```bash
+# Verify all meta-monitoring targets are UP
+curl http://prometheus:9090/api/v1/query?query='up{job=~"prometheus|grafana|loki|tempo"}' | jq '.data.result[] | {job: .metric.job, value: .value[1]}'
+
+# Check for active meta-monitoring alerts
+curl http://prometheus:9090/api/v1/alerts | jq '.data.alerts[] | select(.labels.severity == "critical" or .labels.severity == "warning") | {alert: .labels.alertname, state: .state, severity: .labels.severity}'
+
+# Test meta-monitoring dashboard loads
+curl -H "Authorization: Bearer $GRAFANA_API_KEY" http://grafana:3000/api/dashboards/uid/meta-monitoring
+
+# Verify alert rules loaded
+curl http://prometheus:9090/api/v1/rules | jq '.data.groups[] | select(.name | contains("prometheus.rules") or contains("grafana.rules") or contains("loki.rules") or contains("tempo.rules"))'
+```
+
+### Testing Meta-Monitoring
+
+To verify meta-monitoring is working correctly:
+
+1. **Simulate Service Down**:
+   ```bash
+   # Stop a service temporarily
+   railway service stop loki
+
+   # Wait 2-3 minutes for alert to fire
+   curl http://prometheus:9090/api/v1/alerts | grep LokiDown
+
+   # Restart service
+   railway service start loki
+
+   # Verify alert auto-resolves
+   ```
+
+2. **Test Dashboard**:
+   - Navigate to Meta-Monitoring dashboard in Grafana
+   - Verify all status panels show "UP"
+   - Check that metrics are flowing for all services
+   - Verify no data gaps in time series panels
+
+3. **Alert Delivery Test**:
+   ```bash
+   # Manually fire test alert
+   curl -X POST http://alertmanager:9093/api/v1/alerts -d '[
+     {
+       "labels": {
+         "alertname": "TestMetaMonitoringAlert",
+         "severity": "warning",
+         "team": "platform"
+       },
+       "annotations": {
+         "summary": "Test alert for meta-monitoring validation"
+       }
+     }
+   ]'
+
+   # Verify alert appears in Slack/PagerDuty
+   ```
+
+### Best Practices
+
+1. **Regular Health Checks**: Review meta-monitoring dashboard daily during standup
+2. **Alert Fatigue Prevention**: Tune alert thresholds based on historical data
+3. **Documentation**: Keep this runbook updated with new findings
+4. **Incident Response**: Include meta-monitoring checks in all incident procedures
+5. **Capacity Planning**: Monitor metric cardinality and storage growth
+6. **Backup Monitoring**: Ensure critical application alerts exist outside the stack
+
+### Related Documentation
+
+- Prometheus configuration: `prometheus/prom.yml`
+- Alert rules: `prometheus/rules/alerts.yml`
+- Meta-monitoring dashboard: `grafana/dashboards/meta_monitoring.json`
+
+---
+
 ## Additional Resources
 
 - [Prometheus Documentation](https://prometheus.io/docs/)
@@ -961,3 +1354,4 @@ curl -H "Authorization: Bearer $GRAFANA_API_KEY" \
 |------|--------|--------|
 | 2025-10-08 | Initial runbook creation with DB-HA triage section | Platform Team |
 | 2025-10-08 | Added Stage 7 (Backups & Restore, Failover Drill) and Stage 8 (Security & Access Review) | Platform Team |
+| 2026-01-12 | Added Task 12.6 (Meta-Monitoring) with comprehensive monitoring of observability stack | Platform Team |
