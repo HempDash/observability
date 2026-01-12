@@ -107,6 +107,50 @@ This template deploys four interconnected services:
 
 All services are deployed using official Docker images and configured to work together seamlessly.
 
+## Service Health Monitoring
+
+This stack includes comprehensive service health monitoring and SLA tracking:
+
+### Service Health Dashboard
+
+The **Service Health & SLA Dashboard** provides:
+
+- **Real-time Service Status**: Monitor the health of all observability services (Grafana, Loki, Tempo, Prometheus, Alertmanager, PostgreSQL Exporter)
+- **SLA Tracking**: Track service uptime against 99.9% SLA targets over 24-hour, 7-day, and 30-day windows
+- **Availability Metrics**: View service availability percentages across multiple time windows (5m, 1h, 24h, 7d, 30d)
+- **Service Counts**: Monitor healthy vs unhealthy services at a glance
+- **Uptime Tracking**: Track service uptime since last restart
+
+### Health Check Configuration
+
+All observability services are automatically monitored via Prometheus scraping:
+
+- **Grafana**: Metrics endpoint at `http://grafana:3000/metrics`
+- **Loki**: Metrics endpoint at `http://loki:3100/metrics`
+- **Tempo**: Metrics endpoint at `http://tempo:3200/metrics`
+- **Alertmanager**: Metrics endpoint at `http://alertmanager:9093/metrics`
+- **PostgreSQL Exporter**: Database health via `http://postgres-exporter:9187/metrics`
+
+### SLA Targets
+
+The default SLA target is **99.9% uptime** (43.2 minutes downtime per month). Services are color-coded:
+
+- **Green**: ≥99.9% uptime (meeting SLA)
+- **Yellow**: 95-99% uptime (approaching SLA breach)
+- **Red**: <95% uptime (SLA breach)
+
+### Recording Rules
+
+Prometheus recording rules calculate:
+
+- Individual service availability percentages
+- Overall service health metrics
+- SLA compliance indicators
+- Service uptime hours
+- Service type health aggregation
+
+These metrics are automatically calculated every 30 seconds and available in the Service Health Dashboard.
+
 ## Connecting Your Applications
 
 ### Using [Locomotive](https://railway.com/template/jP9r-f) for Loki

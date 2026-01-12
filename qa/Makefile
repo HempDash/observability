@@ -1,4 +1,4 @@
-.PHONY: help test test-metrics test-alerts test-backup-restore test-all clean setup
+.PHONY: help test test-metrics test-alerts test-backup-restore test-service-health test-all clean setup
 
 # Default target
 help:
@@ -9,6 +9,7 @@ help:
 	@echo "  make setup                - Set up environment and dependencies"
 	@echo "  make test-metrics         - Test metrics collection"
 	@echo "  make test-alerts          - Test alert configuration"
+	@echo "  make test-service-health  - Test service health checks and SLA tracking"
 	@echo "  make test-backup-restore  - Test backup/restore validation"
 	@echo "  make test-all             - Run all tests"
 	@echo "  make test                 - Alias for test-all"
@@ -25,7 +26,7 @@ setup:
 	else \
 		echo ".env file already exists"; \
 	fi
-	@chmod +x test_metrics.sh test_alerts.sh test_backup_restore.sh
+	@chmod +x test_metrics.sh test_alerts.sh test_backup_restore.sh test_service_health.sh
 	@echo "Setup complete!"
 
 # Test metrics collection
@@ -38,6 +39,11 @@ test-alerts:
 	@echo "Running alert tests..."
 	@./test_alerts.sh
 
+# Test service health checks
+test-service-health:
+	@echo "Running service health tests..."
+	@./test_service_health.sh
+
 # Test backup/restore validation
 test-backup-restore:
 	@echo "Running backup/restore validation tests..."
@@ -49,7 +55,7 @@ test-backup-restore:
 	fi
 
 # Run all tests
-test-all: test-metrics test-alerts
+test-all: test-metrics test-alerts test-service-health
 	@echo ""
 	@echo "All tests completed!"
 

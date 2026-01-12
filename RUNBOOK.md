@@ -88,6 +88,49 @@ curl http://postgres-exporter:9187/metrics
 curl http://postgres-exporter:9187/metrics | grep pg_up
 ```
 
+### Loki
+
+```bash
+# Check Loki health
+curl http://loki:3100/ready
+
+# Check metrics
+curl http://loki:3100/metrics
+
+# Check config
+curl http://loki:3100/config
+```
+
+### Tempo
+
+```bash
+# Check Tempo health
+curl http://tempo:3200/ready
+
+# Check metrics
+curl http://tempo:3200/metrics
+
+# Check status
+curl http://tempo:3200/status
+```
+
+### Service Health Dashboard
+
+The **Service Health & SLA Dashboard** in Grafana provides real-time monitoring of all services:
+
+- Navigate to Grafana → Dashboards → Service Health & SLA Dashboard
+- View overall service health percentage
+- Check individual service status (up/down)
+- Monitor SLA compliance (99.9% uptime target)
+- Track uptime percentages over 24h, 7d, and 30d windows
+- View service uptime hours since last restart
+
+**Key Metrics:**
+- `service_health_percentage`: Overall health across all services
+- `service_availability_30d`: 30-day uptime percentage for SLA tracking
+- `service_sla_compliance`: Binary indicator (1 = meeting SLA, 0 = breaching)
+- `service_uptime_hours`: Hours since service restart
+
 ---
 
 ## DB Replication Triage
