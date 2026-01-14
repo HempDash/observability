@@ -1,0 +1,18 @@
+FROM alpine:3.19
+
+# Install required tools for health checks
+RUN apk add --no-cache \
+    bash \
+    curl \
+    netcat-openbsd \
+    jq
+
+# Copy startup check script
+COPY startup-check.sh /usr/local/bin/startup-check.sh
+RUN chmod +x /usr/local/bin/startup-check.sh
+
+# Set working directory
+WORKDIR /app
+
+# Run the startup check script
+ENTRYPOINT ["/usr/local/bin/startup-check.sh"]

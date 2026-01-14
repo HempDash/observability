@@ -157,6 +157,36 @@ services:
         max-file: "3"
         labels: "app,environment"
 
+  # Startup check service - validates all third-party service connections
+  # This service runs once on startup and exits with non-zero if any critical service fails
+  startup-check:
+    build:
+      context: ./scripts
+      dockerfile: dockerfile
+    environment:
+      - PROMETHEUS_URL=http://prometheus:9090
+      - GRAFANA_URL=http://grafana:3000
+      - LOKI_URL=http://loki:3100
+      - TEMPO_URL=http://tempo:3200
+      - ALERTMANAGER_URL=http://alertmanager:9093
+      - PROMTAIL_URL=http://promtail:9080
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - PAGERDUTY_SERVICE_KEY=${PAGERDUTY_SERVICE_KEY:-}
+      - POSTGRES_EXPORTER_URL=${POSTGRES_EXPORTER_URL:-}
+      - MAX_RETRIES=${STARTUP_CHECK_MAX_RETRIES:-30}
+      - RETRY_INTERVAL=${STARTUP_CHECK_RETRY_INTERVAL:-2}
+      - TIMEOUT=${STARTUP_CHECK_TIMEOUT:-5}
+    depends_on:
+      - prometheus
+      - grafana
+      - loki
+      - tempo
+      - alertmanager
+      - promtail
+    labels:
+      app: "startup-check"
+      environment: "development"
+
 volumes:
   prometheus_data:
   loki_data:
