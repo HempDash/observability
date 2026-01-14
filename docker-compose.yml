@@ -144,7 +144,7 @@ services:
     volumes:
       - alertmanager_data:/alertmanager
     environment:
-      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-https://hooks.slack.com/services/YOUR/WEBHOOK/URL}
+      - MATTERMOST_WEBHOOK_URL=${MATTERMOST_WEBHOOK_URL:-}
       - PAGERDUTY_SERVICE_KEY=${PAGERDUTY_SERVICE_KEY:-your-pagerduty-key}
     labels:
       logging: "promtail"
@@ -170,7 +170,7 @@ services:
       - TEMPO_URL=http://tempo:3200
       - ALERTMANAGER_URL=http://alertmanager:9093
       - PROMTAIL_URL=http://promtail:9080
-      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - MATTERMOST_WEBHOOK_URL=${MATTERMOST_WEBHOOK_URL:-}
       - PAGERDUTY_SERVICE_KEY=${PAGERDUTY_SERVICE_KEY:-}
       - POSTGRES_EXPORTER_URL=${POSTGRES_EXPORTER_URL:-}
       - MAX_RETRIES=${STARTUP_CHECK_MAX_RETRIES:-30}

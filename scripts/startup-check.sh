@@ -22,7 +22,7 @@ ALERTMANAGER_URL="${ALERTMANAGER_URL:-http://alertmanager:9093}"
 PROMTAIL_URL="${PROMTAIL_URL:-http://promtail:9080}"
 
 # Optional external services (only checked if configured)
-SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}"
+MATTERMOST_WEBHOOK_URL="${MATTERMOST_WEBHOOK_URL:-}"
 PAGERDUTY_SERVICE_KEY="${PAGERDUTY_SERVICE_KEY:-}"
 POSTGRES_EXPORTER_URL="${POSTGRES_EXPORTER_URL:-}"
 
@@ -127,23 +127,35 @@ check_port() {
     fi
 }
 
-# Validate Slack webhook (non-blocking test)
-check_slack_webhook() {
+# Validate Mattermost webhook (with connectivity test)
+check_mattermost_webhook() {
     local webhook_url=$1
 
-    if [ -z "$webhook_url" ] || [ "$webhook_url" = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL" ]; then
-        log_warning "Slack webhook not configured (using placeholder or empty)"
+    if [ -z "$webhook_url" ]; then
+        log_warning "Mattermost webhook not configured"
         return 0
     fi
 
-    log_info "Validating Slack webhook configuration..."
+    log_info "Validating Mattermost webhook configuration..."
 
-    # We don't send actual messages, just validate the URL format
-    if echo "$webhook_url" | grep -qE "^https://hooks\.slack\.com/services/"; then
-        log_success "Slack webhook URL format is valid"
-        return 0
+    # Validate URL format (Mattermost webhooks typically end with a token)
+    if echo "$webhook_url" | grep -qE "^https?://.+/hooks/"; then
+        log_success "Mattermost webhook URL format is valid"
+
+        # Test connectivity to the Mattermost server (HEAD request to avoid posting)
+        local http_code
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time $TIMEOUT -X HEAD "$webhook_url" 2>/dev/null || echo "000")
+
+        # Mattermost returns 405 Method Not Allowed for HEAD on webhooks, which confirms the endpoint exists
+        if [ "$http_code" = "405" ] || [ "$http_code" = "200" ] || [ "$http_code" = "400" ]; then
+            log_success "Mattermost webhook endpoint is reachable"
+            return 0
+        else
+            log_warning "Mattermost webhook endpoint may not be reachable (HTTP $http_code)"
+            return 1
+        fi
     else
-        log_warning "Slack webhook URL format appears invalid"
+        log_warning "Mattermost webhook URL format appears invalid (expected: https://your-server/hooks/token)"
         return 1
     fi
 }
@@ -272,8 +284,8 @@ main() {
     # ==========================================
     log_section "External Notification Services (Optional)"
 
-    # Slack webhook validation
-    check_slack_webhook "$SLACK_WEBHOOK_URL"
+    # Mattermost webhook validation
+    check_mattermost_webhook "$MATTERMOST_WEBHOOK_URL"
 
     # PagerDuty validation
     check_pagerduty "$PAGERDUTY_SERVICE_KEY"
