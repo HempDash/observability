@@ -1,0 +1,78 @@
+{
+  "dashboard": {
+    "title": "HempDash Compliance Monitoring",
+    "tags": ["compliance", "hemp"],
+    "panels": [
+      {
+        "id": 1,
+        "title": "Age Verification Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "(sum(increase(age_verification_passed_total[1h])) / sum(increase(age_verification_attempts_total[1h]))) * 100",
+            "legendFormat": "Pass Rate (%)",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Geo-fence Violations",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(increase(geofence_violation_total[24h]))",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [10]
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "type": "query"
+            }
+          ],
+          "name": "High Geo-fence Violations",
+          "message": "More than 10 geo-fence violations in 24h",
+          "frequency": "60s"
+        }
+      },
+      {
+        "id": 3,
+        "title": "COA Validation Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "(sum(increase(coa_validation_passed_total[1h])) / sum(increase(coa_validation_attempts_total[1h]))) * 100",
+            "legendFormat": "Pass Rate (%)",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "THC % Compliance",
+        "type": "histogram",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(product_thc_percentage_bucket[1h]))",
+            "legendFormat": "p95 THC %",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      }
+    ],
+    "refresh": "5m"
+  },
+  "overwrite": true
+}

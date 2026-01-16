@@ -1,0 +1,163 @@
+{
+  "project_name": "HempDash Staging",
+  "environment": "staging",
+  "railway_project_id": "[TO_BE_CREATED]",
+  "services": [
+    {
+      "name": "backend-api",
+      "type": "web",
+      "source": {
+        "type": "github",
+        "repo": "HempDash/backend",
+        "branch": "staging"
+      },
+      "build": {
+        "buildCommand": "pip install --no-cache-dir -r requirements.txt",
+        "startCommand": "uvicorn main:app --host 0.0.0.0 --port $PORT",
+        "watchPaths": ["**/*.py"]
+      },
+      "env": {
+        "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
+        "REDIS_URL": "${{Redis.REDIS_URL}}",
+        "ENVIRONMENT": "staging",
+        "PORT": "8000",
+        "SENTRY_DSN": "[FROM_DOPPLER]",
+        "JWT_SECRET_KEY": "[FROM_DOPPLER]",
+        "STRIPE_API_KEY": "[FROM_DOPPLER]",
+        "PLAID_CLIENT_ID": "[FROM_DOPPLER]",
+        "PLAID_SECRET": "[FROM_DOPPLER]",
+        "PLAID_ENV": "sandbox",
+        "CHECKR_API_KEY": "[FROM_DOPPLER]",
+        "GOOGLE_MAPS_API_KEY": "[FROM_DOPPLER]",
+        "AUTH0_DOMAIN": "[FROM_DOPPLER]",
+        "AUTH0_CLIENT_ID": "[FROM_DOPPLER]",
+        "AUTH0_CLIENT_SECRET": "[FROM_DOPPLER]",
+        "AUTH0_AUDIENCE": "[FROM_DOPPLER]",
+        "DOPPLER_TOKEN": "[FROM_DOPPLER_SERVICE_TOKEN]",
+        "DOPPLER_PROJECT": "backend",
+        "DOPPLER_CONFIG": "staging"
+      },
+      "healthcheck": {
+        "path": "/health",
+        "port": 8000,
+        "timeout": 30,
+        "interval": 60
+      },
+      "resources": {
+        "memory_gb": 2,
+        "cpu_cores": 2,
+        "restart_policy": "on-failure"
+      },
+      "networking": {
+        "public": true,
+        "internal_port": 8000
+      }
+    },
+    {
+      "name": "postgres",
+      "type": "database",
+      "source": {
+        "type": "docker",
+        "image": "postgres:15-alpine"
+      },
+      "env": {
+        "POSTGRES_DB": "hempdash_staging",
+        "POSTGRES_USER": "hempdash",
+        "POSTGRES_PASSWORD": "[GENERATE_SECURE_PASSWORD_32_CHARS]",
+        "PGDATA": "/var/lib/postgresql/data/pgdata"
+      },
+      "volumes": [
+        {
+          "name": "postgres-data",
+          "mountPath": "/var/lib/postgresql/data",
+          "size_gb": 10
+        }
+      ],
+      "resources": {
+        "memory_gb": 1,
+        "cpu_cores": 1
+      },
+      "networking": {
+        "public": false,
+        "internal_port": 5432
+      }
+    },
+    {
+      "name": "redis",
+      "type": "cache",
+      "source": {
+        "type": "docker",
+        "image": "redis:7-alpine"
+      },
+      "command": "redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru",
+      "volumes": [
+        {
+          "name": "redis-data",
+          "mountPath": "/data",
+          "size_gb": 1
+        }
+      ],
+      "resources": {
+        "memory_gb": 0.5,
+        "cpu_cores": 0.5
+      },
+      "networking": {
+        "public": false,
+        "internal_port": 6379
+      }
+    },
+    {
+      "name": "eta-service",
+      "type": "web",
+      "source": {
+        "type": "github",
+        "repo": "HempDash/eta-service",
+        "branch": "staging"
+      },
+      "build": {
+        "buildCommand": "npm ci --production",
+        "startCommand": "npm start",
+        "watchPaths": ["**/*.js", "**/*.ts"]
+      },
+      "env": {
+        "NODE_ENV": "staging",
+        "PORT": "3000",
+        "GOOGLE_MAPS_API_KEY": "[FROM_DOPPLER]",
+        "BACKEND_API_URL": "https://api-staging.gethempdash.com",
+        "REDIS_URL": "${{Redis.REDIS_URL}}"
+      },
+      "healthcheck": {
+        "path": "/health",
+        "port": 3000,
+        "timeout": 30,
+        "interval": 60
+      },
+      "resources": {
+        "memory_gb": 1,
+        "cpu_cores": 1
+      },
+      "networking": {
+        "public": true,
+        "internal_port": 3000
+      }
+    }
+  ],
+  "domains": {
+    "backend-api": {
+      "custom_domain": "api-staging.gethempdash.com",
+      "generate_certificate": true
+    },
+    "eta-service": {
+      "custom_domain": "eta-staging.gethempdash.com",
+      "generate_certificate": true
+    }
+  },
+  "notes": [
+    "This is a staging environment configuration",
+    "All services should connect to Doppler for secret management",
+    "Database password should be generated using: openssl rand -base64 32",
+    "After Railway project creation, update domain DNS records in Cloudflare",
+    "Ensure GitHub repository access is granted to Railway GitHub app",
+    "Test in staging before applying similar config to production"
+  ]
+}

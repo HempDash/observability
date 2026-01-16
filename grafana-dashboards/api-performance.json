@@ -1,0 +1,85 @@
+{
+  "dashboard": {
+    "title": "HempDash API Performance",
+    "tags": ["api", "performance"],
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Latency (p50, p95, p99)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Error Rate (%)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "(rate(http_requests_total{status=~\"5..\"}[5m]) / rate(http_requests_total[5m])) * 100",
+            "legendFormat": "5xx errors",
+            "refId": "A"
+          },
+          {
+            "expr": "(rate(http_requests_total{status=~\"4..\"}[5m]) / rate(http_requests_total[5m])) * 100",
+            "legendFormat": "4xx errors",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [1]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "type": "query"
+            }
+          ],
+          "name": "High Error Rate",
+          "message": "API error rate above 1%",
+          "frequency": "60s",
+          "handler": 1
+        }
+      },
+      {
+        "id": 3,
+        "title": "Top 10 Slowest Endpoints",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])))",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+      }
+    ],
+    "refresh": "30s"
+  },
+  "overwrite": true
+}

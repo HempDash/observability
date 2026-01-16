@@ -1,0 +1,54 @@
+{
+  "dashboard": {
+    "title": "HempDash Database Health",
+    "tags": ["database", "postgresql"],
+    "panels": [
+      {
+        "id": 1,
+        "title": "Database Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "pg_stat_database_numbackends{datname=\"hempdash\"}",
+            "legendFormat": "Active Connections",
+            "refId": "A"
+          },
+          {
+            "expr": "pg_settings_max_connections",
+            "legendFormat": "Max Connections",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Query Duration (p95)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(pg_stat_statements_query_time_bucket[5m]))",
+            "legendFormat": "{{query}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Top 10 Slowest Queries",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, pg_stat_statements_mean_time_ms)",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+      }
+    ],
+    "refresh": "1m"
+  },
+  "overwrite": true
+}

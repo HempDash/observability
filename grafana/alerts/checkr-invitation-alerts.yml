@@ -1,0 +1,89 @@
+groups:
+  - name: checkr_invitation_alerts
+    interval: 5m
+    rules:
+      - alert: HighExpirationRate
+        expr: |
+          (
+            increase(invitation_expired_total[1h])
+            /
+            increase(invitation_created_total{status="success"}[1h])
+          ) > 0.20
+        for: 1h
+        labels:
+          severity: warning
+          component: checkr
+          team: operations
+        annotations:
+          summary: "High invitation expiration rate detected"
+          description: "{{ $value | humanizePercentage }} of invitations are expiring without completion in the last hour. This may indicate UX issues or driver engagement problems."
+          dashboard: "https://grafana.gethempdash.com/d/checkr-invitations"
+          runbook: "https://docs.gethempdash.com/runbooks/checkr-high-expiration"
+
+      - alert: LowCompletionRate
+        expr: invitation_completion_rate < 60
+        for: 2h
+        labels:
+          severity: warning
+          component: checkr
+          team: operations
+        annotations:
+          summary: "Low invitation completion rate"
+          description: "7-day completion rate is {{ $value }}%, below target of 80%. Review invitation email deliverability and driver communication."
+          dashboard: "https://grafana.gethempdash.com/d/checkr-invitations"
+          runbook: "https://docs.gethempdash.com/runbooks/checkr-low-completion"
+
+      - alert: InvitationAPIErrors
+        expr: |
+          rate(invitation_created_total{status="error"}[5m]) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+          component: checkr
+          team: engineering
+        annotations:
+          summary: "High error rate in invitation creation"
+          description: "{{ $value | humanizePercentage }} error rate in last 5 minutes. Checkr API may be down or rate limits exceeded."
+          dashboard: "https://grafana.gethempdash.com/d/checkr-invitations"
+          runbook: "https://docs.gethempdash.com/runbooks/checkr-api-errors"
+
+      - alert: StaleInvitations
+        expr: invitation_pending_count > 100
+        for: 24h
+        labels:
+          severity: info
+          component: checkr
+          team: operations
+        annotations:
+          summary: "High number of pending invitations"
+          description: "{{ $value }} invitations pending for over 24 hours. Consider sending reminder emails or reviewing driver communication strategy."
+          dashboard: "https://grafana.gethempdash.com/d/checkr-invitations"
+          runbook: "https://docs.gethempdash.com/runbooks/checkr-stale-invitations"
+
+      - alert: RateLimitSpike
+        expr: |
+          increase(invitation_resend_total{status="rate_limited"}[1h]) > 20
+        for: 15m
+        labels:
+          severity: warning
+          component: checkr
+          team: operations
+        annotations:
+          summary: "Spike in rate limit hits"
+          description: "{{ $value }} rate limit hits in the last hour. Multiple drivers may be attempting repeated resends."
+          dashboard: "https://grafana.gethempdash.com/d/checkr-invitations"
+          runbook: "https://docs.gethempdash.com/runbooks/checkr-rate-limits"
+
+      - alert: SlowCompletionTimes
+        expr: |
+          histogram_quantile(0.95, rate(invitation_completion_duration_seconds_bucket[1h])) > 432000
+        for: 6h
+        labels:
+          severity: info
+          component: checkr
+          team: product
+        annotations:
+          summary: "Slow invitation completion times"
+          description: "p95 completion time is {{ $value | humanizeDuration }}. Review driver communication and UX to reduce friction."
+          dashboard: "https://grafana.gethempdash.com/d/checkr-invitations"
+          runbook: "https://docs.gethempdash.com/runbooks/checkr-slow-completions"

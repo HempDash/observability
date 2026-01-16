@@ -1,0 +1,410 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "checkr-invitations",
+    "title": "Checkr Invitation Metrics",
+    "tags": ["checkr", "background-check", "invitations", "hempdash"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-7d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["10s", "30s", "1m", "5m", "15m", "30m", "1h"],
+      "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": {
+            "text": "Prometheus",
+            "value": "Prometheus"
+          }
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "${datasource}",
+          "enable": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "tags": ["deployment"]
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "type": "row",
+        "title": "Overview Metrics",
+        "collapsed": false,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "type": "stat",
+        "title": "Invitations Created (Today)",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1},
+        "targets": [
+          {
+            "expr": "increase(invitation_created_total{status=\"success\"}[24h])",
+            "legendFormat": "Created",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "blue"},
+                {"value": 10, "color": "green"},
+                {"value": 50, "color": "yellow"}
+              ]
+            },
+            "mappings": []
+          }
+        },
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "auto"
+        }
+      },
+      {
+        "id": 3,
+        "type": "gauge",
+        "title": "Completion Rate (7 days)",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1},
+        "targets": [
+          {
+            "expr": "invitation_completion_rate",
+            "legendFormat": "Completion %",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 60, "color": "yellow"},
+                {"value": 80, "color": "green"}
+              ]
+            }
+          }
+        },
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "Pending Invitations",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1},
+        "targets": [
+          {
+            "expr": "invitation_pending_count",
+            "legendFormat": "Pending",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 50, "color": "yellow"},
+                {"value": 100, "color": "red"}
+              ]
+            }
+          }
+        },
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          }
+        }
+      },
+      {
+        "id": 5,
+        "type": "stat",
+        "title": "Expired Today",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1},
+        "targets": [
+          {
+            "expr": "increase(invitation_expired_total[24h])",
+            "legendFormat": "Expired",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 5, "color": "yellow"},
+                {"value": 10, "color": "orange"}
+              ]
+            }
+          }
+        },
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          }
+        }
+      },
+      {
+        "id": 6,
+        "type": "row",
+        "title": "Invitation Funnel",
+        "collapsed": false,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5}
+      },
+      {
+        "id": 7,
+        "type": "bargauge",
+        "title": "Invitation Funnel (Last 7 Days)",
+        "gridPos": {"h": 6, "w": 24, "x": 0, "y": 6},
+        "targets": [
+          {
+            "expr": "increase(invitation_created_total{status=\"success\"}[7d])",
+            "legendFormat": "Created",
+            "refId": "A"
+          },
+          {
+            "expr": "increase(invitation_completed_total[7d])",
+            "legendFormat": "Completed",
+            "refId": "B"
+          },
+          {
+            "expr": "increase(invitation_expired_total[7d])",
+            "legendFormat": "Expired",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "palette-classic"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"}
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "Completed"},
+              "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]
+            },
+            {
+              "matcher": {"id": "byName", "options": "Expired"},
+              "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]
+            }
+          ]
+        },
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "showUnfilled": true
+        }
+      },
+      {
+        "id": 8,
+        "type": "row",
+        "title": "Trends",
+        "collapsed": false,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 12}
+      },
+      {
+        "id": 9,
+        "type": "timeseries",
+        "title": "Invitation Creation Rate",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+        "targets": [
+          {
+            "expr": "rate(invitation_created_total{status=\"success\"}[5m]) * 60",
+            "legendFormat": "Invitations/min",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "palette-classic"},
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10,
+              "showPoints": "never"
+            }
+          }
+        },
+        "options": {
+          "legend": {"displayMode": "list", "placement": "bottom"},
+          "tooltip": {"mode": "multi"}
+        }
+      },
+      {
+        "id": 10,
+        "type": "timeseries",
+        "title": "Completion Duration (Percentiles)",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.5, rate(invitation_completion_duration_seconds_bucket[5m])) / 3600",
+            "legendFormat": "p50 (median)",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(invitation_completion_duration_seconds_bucket[5m])) / 3600",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(invitation_completion_duration_seconds_bucket[5m])) / 3600",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "h",
+            "color": {"mode": "palette-classic"},
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 0,
+              "showPoints": "never"
+            }
+          }
+        },
+        "options": {
+          "legend": {"displayMode": "list", "placement": "bottom"},
+          "tooltip": {"mode": "multi"}
+        }
+      },
+      {
+        "id": 11,
+        "type": "row",
+        "title": "Errors & Alerts",
+        "collapsed": false,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 21}
+      },
+      {
+        "id": 12,
+        "type": "timeseries",
+        "title": "Error Rate",
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 22},
+        "targets": [
+          {
+            "expr": "rate(invitation_created_total{status=\"error\"}[5m]) * 100",
+            "legendFormat": "Error %",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 1, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            },
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 50,
+              "showPoints": "never"
+            }
+          }
+        },
+        "options": {
+          "legend": {"displayMode": "list", "placement": "bottom"},
+          "tooltip": {"mode": "single"}
+        }
+      },
+      {
+        "id": 13,
+        "type": "stat",
+        "title": "Rate Limit Hits (24h)",
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 22},
+        "targets": [
+          {
+            "expr": "increase(invitation_resend_total{status=\"rate_limited\"}[24h])",
+            "legendFormat": "Rate Limited",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 10, "color": "yellow"},
+                {"value": 50, "color": "red"}
+              ]
+            }
+          }
+        },
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          }
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}

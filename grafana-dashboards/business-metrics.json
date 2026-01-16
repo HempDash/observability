@@ -1,0 +1,71 @@
+{
+  "dashboard": {
+    "title": "HempDash Business Metrics",
+    "tags": ["business", "metrics"],
+    "panels": [
+      {
+        "id": 1,
+        "title": "Orders per Hour",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(orders_created_total[1h]) * 3600",
+            "legendFormat": "Orders/hr",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "GMV (Gross Merchandise Value)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(increase(order_value_total[24h]))",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Active Users (24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(count by (user_id) (user_activity_total{timestamp > now() - 24h}))",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Vendor Count by Status",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (status) (vendor_status_total)",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Courier Count by Status",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (status) (courier_status_total)",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      }
+    ],
+    "refresh": "5m"
+  },
+  "overwrite": true
+}

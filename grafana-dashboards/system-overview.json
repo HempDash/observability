@@ -1,0 +1,66 @@
+{
+  "dashboard": {
+    "title": "HempDash System Overview",
+    "tags": ["infrastructure", "system"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Uptime",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=~\"backend-api|eta-service|postgres-exporter\"}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "CPU Usage by Service",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total[5m]) * 100",
+            "legendFormat": "{{job}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Memory Usage by Service",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes / 1024 / 1024",
+            "legendFormat": "{{job}} (MB)",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Request Rate (req/sec)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "{{method}} {{endpoint}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      }
+    ],
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    }
+  },
+  "overwrite": true
+}

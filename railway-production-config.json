@@ -1,0 +1,272 @@
+{
+  "project_name": "HempDash Production",
+  "environment": "production",
+  "railway_project_id": "[TO_BE_CREATED]",
+  "services": [
+    {
+      "name": "backend-api",
+      "type": "web",
+      "source": {
+        "type": "github",
+        "repo": "HempDash/backend",
+        "branch": "main"
+      },
+      "build": {
+        "buildCommand": "pip install --no-cache-dir -r requirements.txt",
+        "startCommand": "gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120 --keep-alive 5",
+        "watchPaths": ["**/*.py"]
+      },
+      "env": {
+        "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
+        "REDIS_URL": "${{Redis.REDIS_URL}}",
+        "ENVIRONMENT": "production",
+        "PORT": "8000",
+        "WORKERS": "4",
+        "SENTRY_DSN": "[FROM_DOPPLER_PROD]",
+        "JWT_SECRET_KEY": "[FROM_DOPPLER_PROD]",
+        "STRIPE_API_KEY": "[FROM_DOPPLER_PROD_LIVE_KEY]",
+        "PLAID_CLIENT_ID": "[FROM_DOPPLER_PROD]",
+        "PLAID_SECRET": "[FROM_DOPPLER_PROD]",
+        "PLAID_ENV": "production",
+        "CHECKR_API_KEY": "[FROM_DOPPLER_PROD]",
+        "GOOGLE_MAPS_API_KEY": "[FROM_DOPPLER_PROD]",
+        "AUTH0_DOMAIN": "[FROM_DOPPLER_PROD]",
+        "AUTH0_CLIENT_ID": "[FROM_DOPPLER_PROD]",
+        "AUTH0_CLIENT_SECRET": "[FROM_DOPPLER_PROD]",
+        "AUTH0_AUDIENCE": "[FROM_DOPPLER_PROD]",
+        "DOPPLER_TOKEN": "[FROM_DOPPLER_SERVICE_TOKEN]",
+        "DOPPLER_PROJECT": "backend",
+        "DOPPLER_CONFIG": "production",
+        "LOG_LEVEL": "INFO",
+        "ENABLE_METRICS": "true",
+        "PROMETHEUS_PORT": "9090"
+      },
+      "healthcheck": {
+        "path": "/health",
+        "port": 8000,
+        "timeout": 30,
+        "interval": 60
+      },
+      "resources": {
+        "memory_gb": 4,
+        "cpu_cores": 4,
+        "restart_policy": "always",
+        "restart_max_retries": 5
+      },
+      "autoscaling": {
+        "enabled": true,
+        "min_replicas": 2,
+        "max_replicas": 10,
+        "target_cpu_percent": 70,
+        "target_memory_percent": 80,
+        "scale_down_delay_seconds": 300
+      },
+      "networking": {
+        "public": true,
+        "internal_port": 8000
+      }
+    },
+    {
+      "name": "postgres",
+      "type": "database",
+      "source": {
+        "type": "docker",
+        "image": "postgres:15-alpine"
+      },
+      "env": {
+        "POSTGRES_DB": "hempdash_production",
+        "POSTGRES_USER": "hempdash",
+        "POSTGRES_PASSWORD": "[GENERATE_SECURE_PASSWORD_64_CHARS]",
+        "PGDATA": "/var/lib/postgresql/data/pgdata",
+        "POSTGRES_INITDB_ARGS": "--encoding=UTF8 --locale=en_US.UTF-8",
+        "POSTGRES_MAX_CONNECTIONS": "200",
+        "POSTGRES_SHARED_BUFFERS": "256MB"
+      },
+      "volumes": [
+        {
+          "name": "postgres-data",
+          "mountPath": "/var/lib/postgresql/data",
+          "size_gb": 50
+        }
+      ],
+      "backups": {
+        "enabled": true,
+        "frequency": "daily",
+        "retention_days": 30,
+        "time": "02:00",
+        "timezone": "America/Chicago"
+      },
+      "resources": {
+        "memory_gb": 4,
+        "cpu_cores": 2
+      },
+      "networking": {
+        "public": false,
+        "internal_port": 5432
+      },
+      "monitoring": {
+        "enable_slow_query_log": true,
+        "slow_query_threshold_ms": 1000
+      }
+    },
+    {
+      "name": "redis",
+      "type": "cache",
+      "source": {
+        "type": "docker",
+        "image": "redis:7-alpine"
+      },
+      "command": "redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru --save 900 1 --save 300 10 --save 60 10000",
+      "volumes": [
+        {
+          "name": "redis-data",
+          "mountPath": "/data",
+          "size_gb": 5
+        }
+      ],
+      "persistence": {
+        "enabled": true,
+        "aof_enabled": true,
+        "rdb_enabled": true
+      },
+      "resources": {
+        "memory_gb": 2,
+        "cpu_cores": 1
+      },
+      "networking": {
+        "public": false,
+        "internal_port": 6379
+      }
+    },
+    {
+      "name": "eta-service",
+      "type": "web",
+      "source": {
+        "type": "github",
+        "repo": "HempDash/eta-service",
+        "branch": "main"
+      },
+      "build": {
+        "buildCommand": "npm ci --production",
+        "startCommand": "npm start",
+        "watchPaths": ["**/*.js", "**/*.ts"]
+      },
+      "env": {
+        "NODE_ENV": "production",
+        "PORT": "3000",
+        "GOOGLE_MAPS_API_KEY": "[FROM_DOPPLER_PROD]",
+        "BACKEND_API_URL": "https://api.gethempdash.com",
+        "REDIS_URL": "${{Redis.REDIS_URL}}",
+        "LOG_LEVEL": "info"
+      },
+      "healthcheck": {
+        "path": "/health",
+        "port": 3000,
+        "timeout": 30,
+        "interval": 60
+      },
+      "resources": {
+        "memory_gb": 2,
+        "cpu_cores": 2
+      },
+      "autoscaling": {
+        "enabled": true,
+        "min_replicas": 2,
+        "max_replicas": 6,
+        "target_cpu_percent": 70
+      },
+      "networking": {
+        "public": true,
+        "internal_port": 3000
+      }
+    },
+    {
+      "name": "algolia-indexer",
+      "type": "worker",
+      "source": {
+        "type": "github",
+        "repo": "HempDash/hempdash-algolia-indexers",
+        "branch": "main"
+      },
+      "build": {
+        "buildCommand": "npm ci --production",
+        "startCommand": "npm run start:worker"
+      },
+      "env": {
+        "NODE_ENV": "production",
+        "ALGOLIA_APP_ID": "[FROM_DOPPLER_PROD]",
+        "ALGOLIA_ADMIN_API_KEY": "[FROM_DOPPLER_PROD]",
+        "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
+        "REDIS_URL": "${{Redis.REDIS_URL}}",
+        "SYNC_INTERVAL_MINUTES": "15"
+      },
+      "resources": {
+        "memory_gb": 1,
+        "cpu_cores": 1
+      },
+      "networking": {
+        "public": false
+      }
+    }
+  ],
+  "domains": {
+    "backend-api": {
+      "custom_domain": "api.gethempdash.com",
+      "generate_certificate": true,
+      "cdn_enabled": false
+    },
+    "eta-service": {
+      "custom_domain": "eta.gethempdash.com",
+      "generate_certificate": true,
+      "cdn_enabled": false
+    }
+  },
+  "security": {
+    "ip_whitelist": {
+      "enabled": false,
+      "allowed_ips": []
+    },
+    "rate_limiting": {
+      "enabled": true,
+      "requests_per_minute": 1000
+    },
+    "ddos_protection": {
+      "enabled": true
+    }
+  },
+  "monitoring": {
+    "prometheus": {
+      "enabled": true,
+      "scrape_interval": "15s"
+    },
+    "grafana": {
+      "enabled": true,
+      "url": "https://grafana-staging-064c.up.railway.app"
+    },
+    "alerts": {
+      "email": "jonathan@gethempdash.com",
+      "slack_webhook": "[OPTIONAL_SLACK_WEBHOOK]"
+    }
+  },
+  "deployment": {
+    "strategy": "blue-green",
+    "health_check_grace_period_seconds": 60,
+    "rollback_on_failure": true,
+    "requires_manual_approval": true
+  },
+  "notes": [
+    "⚠️ CRITICAL: This is a PRODUCTION environment configuration",
+    "⚠️ CRITICAL: DO NOT execute without Jonathan's explicit approval",
+    "⚠️ CRITICAL: Test all changes in staging first",
+    "All services should connect to Doppler for secret management",
+    "Database password should be generated using: openssl rand -base64 64",
+    "After Railway project creation, update domain DNS records in Cloudflare",
+    "Ensure GitHub repository access is granted to Railway GitHub app",
+    "Configure Stripe LIVE mode API keys (not test mode)",
+    "Set up database backups to run daily at 2 AM Central Time",
+    "Enable autoscaling for backend-api and eta-service",
+    "Monitor resource usage for first 48 hours after deployment",
+    "Have rollback plan ready before deploying",
+    "Notify team 24 hours before production deployment"
+  ]
+}
